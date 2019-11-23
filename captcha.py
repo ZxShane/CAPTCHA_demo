@@ -177,6 +177,7 @@ def gene_npy(hardness,set,labels):
     # 读取每一张图片
     for imgname in imgs:
         img = load_img(imgname)
+        img = img_to_array(img)
         imgdatas[i] = img
         i += 1
     # 将label转为on_hot编码
