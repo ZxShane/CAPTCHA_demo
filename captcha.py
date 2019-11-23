@@ -1,10 +1,12 @@
 # coding=utf-8
 import random
 import string
-import sys
-import math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 import os
+import numpy as np
+from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
+import glob
+import tensorflow as tf
 
 font_path = 'Arial.ttf'
 # 生成几位数的验证码
@@ -12,6 +14,7 @@ number = 4
 # 生成验证码图片的高度和宽度
 size = (150, 50)
 
+# ###############   一些画验证码的函数   ###########################################
 def getRandomColor1():
     r = random.randint(32, 127)
     g = random.randint(32, 127)
@@ -60,8 +63,10 @@ def build_file_path(x):
         os.mkdir('./imgs')
     return os.path.join('./imgs', x)
 
+# ###############   分隔符   ###########################################
 
 # 生成验证码
+
 def gene_code(hardness,j,set):
     # bgcolor = (random.randint(64, 255), random.randint(64, 255), random.randint(64, 255))
     # fontcolor = (random.randint(32, 127), random.randint(32, 127), random.randint(32, 127))
@@ -117,17 +122,75 @@ def gene_code(hardness,j,set):
     if not os.path.exists(img_dir):
         os.makedirs(img_dir)
     image.save(img_dir+'/hardness'+str(hardness)+'_'+str(j+1)+'.png')  # 保存验证码图片
-    path_file_name = img_dir+'/hardness'+str(hardness)+'.txt'
-    if not os.path.exists(path_file_name):
-        with open(path_file_name, "a") as f:
-            print(f)
-    with open(path_file_name, "a") as f:
-        f.write(text+'\n')
 
+    # 删掉了保存label的txt，因为觉得没什么用
+
+    # path_file_name = img_dir+'/hardness'+str(hardness)+'.txt'
+    # if not os.path.exists(path_file_name):
+    #     with open(path_file_name, "a") as f:
+    #         print(f)
+    # with open(path_file_name, "a") as f:
+    #     f.write(text+'\n')
+    return text
+
+
+# on_hot编码
+
+def to_onhot(text):
+    #自定义字母顺序
+    alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+    # define a mapping of chars to integers
+
+    char_to_int = dict((c, i) for i, c in enumerate(alphabet))
+
+    labels=[]
+    # 遍历每一个验证码
+    for onetext in text:
+        print(onetext)
+        # 将验证码的每一个字母变成对应的数字
+        integer_encoded = [char_to_int[char] for char in onetext]
+        print(integer_encoded)
+        # one hot encode
+        onehot_encoded = list()
+        for value in integer_encoded:
+            letter = [0 for _ in range(len(alphabet))]
+            letter[value] = 1
+            onehot_encoded.append(letter)
+        labels.append(onehot_encoded)
+
+    return labels
+
+
+# 生成.npy文件
+def gene_npy(hardness,set,labels):
+    i=0
+    # 判断保存在哪个集合
+    if set == 1:
+        img_dir = build_file_path('train/hardness'+str(hardness))
+    if set == 2:
+        img_dir = build_file_path('val/hardness'+str(hardness))
+    # 获取所有图片的存储路径
+    imgs = glob.glob(img_dir+'/hardness'+str(hardness)+'_*.png')
+    # 初始化图片的array
+    imgdatas = np.ndarray((len(imgs), 50, 150, 3), dtype=np.uint8)
+    # 读取每一张图片
+    for imgname in imgs:
+        img = load_img(imgname)
+        imgdatas[i] = img
+        i += 1
+    # 将label转为on_hot编码
+    label_onhot=to_onhot(labels)
+
+    # 生成npy文件
+    np.save(img_dir + '/imgs.npy', imgdatas)
+    print('loading done')
+    np.save(img_dir + '/labels.npy', label_onhot)
 
 if __name__ == "__main__":
     cnt_train = int(input("请输入需要训练集中生成的验证码数量:"))
     cnt_val = int(input("请输入需要交叉验证集中生成的验证码数量:"))
+
     for i in range(3):
         if i == 0:
             print("generating easy...")
@@ -135,11 +198,18 @@ if __name__ == "__main__":
             print("generating middle...")
         if i == 2:
             print("generating hard...")
+        labels = []
         for j_train in range(cnt_train):
-            gene_code(i,j_train,1)
+            label=gene_code(i,j_train,1)
+            labels.append(label)
+
         print("generate train done.")
+        gene_npy(i, 1, labels)
+        labels = []
         for j_val in range(cnt_val):
-            gene_code(i, j_val,2)
+            label=gene_code(i, j_val, 2)
+            labels.append(label)
+        gene_npy(i, 2, labels)
         print("generate validation done.")
 
 
