@@ -1,4 +1,3 @@
-# coding=utf-8
 import random
 import string
 from PIL import Image, ImageDraw, ImageFont
@@ -6,13 +5,18 @@ import os
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
 import glob
-import tensorflow as tf
-
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 font_path = 'Arial.ttf'
 # 生成几位数的验证码
 number = 4
 # 生成验证码图片的高度和宽度
 size = (150, 50)
+font = ImageFont.truetype(font_path, 30)
+width, height = size
+
+# 相较于上一版，只改变了gene_text和gene_code函数
+# 在添加噪声中，将画圆弧变成了画圆点
 
 # ###############   一些画验证码的函数   ###########################################
 def getRandomColor1():
@@ -21,18 +25,49 @@ def getRandomColor1():
     b = random.randint(32, 127)
     return (r, g, b)
 
+
 def getRandomColor2():
     r = random.randint(64, 255)
     g = random.randint(64, 255)
     b = random.randint(64, 255)
     return (r, g, b)
 
-# 用来随机生成一个字符串
-def gene_text():
+def addSalt(image, saltNum):
+    count = 0
+    while count < saltNum:
+        randX = random.randint(0, width-1)
+        randY = random.randint(0, height-1)
+        if image.getpixel((randX, randY))[-1] == 0:
+            image.putpixel((randX, randY), (random.randint(100,255), random.randint(100,255), random.randint(100,255), 255))
+            count += 1
+        else:
+            continue
+
+
+# ### 生成字符验证码，在这里增加了字符的拼接，定义字符间的间距、颜色 #######
+def gene_text(isrotate,bgcolor,max):
     source = list(string.ascii_uppercase)
     for index in range(0, 10):
         source.append(str(index))
-    return ''.join(random.sample(source, number))  # number是生成验证码的位数
+    text= ''.join(random.sample(source, 1))
+    font_width, font_height = font.getsize(text)
+    # 生成画布
+    image = Image.new('RGBA', (width, height), bgcolor)
+    code = ''.join(random.sample(source, 4))
+    for k in range(4):
+        # 将单个字符变成一张图片
+        img_s= Image.new('RGBA', (font_width + 8, font_height + 6), bgcolor)
+        draw = ImageDraw.Draw(img_s)
+        draw.text((0,3), code[k],
+                  font=font, fill=getRandomColor1())
+        # img_s = fontImg.crop((randInt*fontWidth,0,(randInt+1)*fontWidth,fontHeight))
+        if isrotate:
+            img_s = img_s.rotate(random.randint(-20,20))
+        # 在这里定义字符的随机间距，随着难度升级，最大间距也不断变大
+        randwid=random.randint(8, max)
+        # 将字符拼接
+        image.paste(img_s, (k*(font_width+10)+randwid, 3))
+    return image, code
 
 
 # 用来绘制干扰线
@@ -40,7 +75,7 @@ def gene_line(draw, width, height,line_number):
     for line in range(line_number):
         begin = (random.randint(0, width), random.randint(0, height))
         end = (random.randint(0, width), random.randint(0, height))
-        linecolor = (random.randint(32, 127), random.randint(32, 127), random.randint(32, 127))
+        # linecolor = (random.randint(32, 127), random.randint(32, 127), random.randint(32, 127))
         draw.line([begin, end], fill=getRandomColor2())
 
 # 用来绘制干扰点
@@ -52,11 +87,11 @@ def drawPoint(draw,width,height,point_number):
 
 # 用来绘制干扰圆弧
 def drawArc(draw,width,height,arc_number):
+
     for i in range(arc_number):
         x = random.randint(0, width)
-        y = random.randint(0, height)
-        draw.arc((x, y, x + 8, y + 8), 0, 90, fill=getRandomColor2())
-
+        y = random.randint(6, height)
+        draw.ellipse((x, y, x+2, y+2), fill=getRandomColor2())
 # 添加文件路径
 def build_file_path(x):
     if not os.path.isdir('./imgs'):
@@ -68,53 +103,42 @@ def build_file_path(x):
 # 生成验证码
 
 def gene_code(hardness,j,set):
-    # bgcolor = (random.randint(64, 255), random.randint(64, 255), random.randint(64, 255))
-    # fontcolor = (random.randint(32, 127), random.randint(32, 127), random.randint(32, 127))
     if hardness == 0:
         draw_line = False
         draw_circle = False
         rotate=False
-        bgcolor=(255,255,255)
+        bgcolor= 'white'
+        max=8
     if hardness == 1:
         draw_line = True
-        draw_circle = False
+        draw_circle = True
         rotate = True
         point_number = random.randint(5, 10)
-        line_number = random.randint(3, 5)
-        bgcolor = (232,232,232)
+        arc_number = random.randint(5, 10)
+        line_number = random.randint(2, 3)
+        max=12
+        bgcolor = (255,245,238)
     if hardness == 2:
         draw_line = True
         draw_circle = True
         rotate = True
         point_number = random.randint(10, 20)
-        arc_number = random.randint(5,10)
+        arc_number = random.randint(15,20)
         line_number = random.randint(10,15)
-        bgcolor = (136, 136, 136)
-
-    width, height = size  # 宽和高
-    image = Image.new('RGBA', (width, height), bgcolor)  # 创建图片
-    font = ImageFont.truetype(font_path, 25)  # 验证码的字体
-    draw = ImageDraw.Draw(image)  # 创建画笔
-    text = gene_text()  # 生成字符串
-    font_width, font_height = font.getsize(text)
-    draw.text(((width - font_width) / number, (height - font_height) / number), text,
-              font=font, fill=getRandomColor1())  # 填充字符串
-
+        bgcolor = (240, 255, 240)
+        max=18
+    image,label = gene_text(rotate,bgcolor,max)
+    draw = ImageDraw.Draw(image)
     if draw_line:
         gene_line(draw, width, height,line_number)
         drawPoint(draw,width,height,point_number)
     if draw_circle:
         drawArc(draw, width, height, arc_number)
-
-    if rotate:
-        image = image.rotate(random.randint(-10, 20))
-        draw = ImageDraw.Draw(image)  # 创建画笔
-
-        for x in range(width):
-            for y in range(height):
-                c = image.getpixel((x, y))
-                if c == (0, 0, 0, 0):
-                    draw.point([x, y], fill=bgcolor)
+    for x in range(width):
+        for y in range(height):
+            c = image.getpixel((x, y))
+            if c == (0, 0, 0, 0):
+                draw.point([x, y], fill=bgcolor)
     if set == 1:
         img_dir = build_file_path('train/hardness'+str(hardness))
     if set == 2:
@@ -131,7 +155,7 @@ def gene_code(hardness,j,set):
     #         print(f)
     # with open(path_file_name, "a") as f:
     #     f.write(text+'\n')
-    return text
+    return label
 
 
 # on_hot编码
@@ -172,11 +196,13 @@ def gene_npy(hardness,set,labels):
         img_dir = build_file_path('val/hardness'+str(hardness))
     # 获取所有图片的存储路径
     imgs = glob.glob(img_dir+'/hardness'+str(hardness)+'_*.png')
+    print(imgs)
     # 初始化图片的array
     imgdatas = np.ndarray((len(imgs), 50, 150, 3), dtype=np.uint8)
     # 读取每一张图片
-    for imgname in imgs:
-        img = load_img(imgname)
+    for imgname in range(len(imgs)):
+        imgpath = img_dir+'/hardness'+str(hardness)+'_'+str(imgname+1)+'.png'
+        img = load_img(imgpath)
         img = img_to_array(img)
         imgdatas[i] = img
         i += 1
@@ -212,5 +238,12 @@ if __name__ == "__main__":
             labels.append(label)
         gene_npy(i, 2, labels)
         print("generate validation done.")
+    X = np.load('imgs/train/hardness0/imgs.npy')
+    from PIL import Image
+    im = array_to_img(X[0,:,:,:])
+    im.show()
 
-
+    X = np.transpose(X, [0,2,1,3])
+    Y = np.load('imgs/train/hardness0/labels.npy')
+    # Y = np.argmax(Y,2)
+    print(Y[0])
